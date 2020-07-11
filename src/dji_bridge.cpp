@@ -1,6 +1,7 @@
 #include "dji_bridge.h"
 #include <dji_sdk/dji_sdk.h>
 #include <ros/ros.h>
+#include <tf/tf.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Imu.h>
 #include <geometry_msgs/TransformStamped.h>
@@ -30,6 +31,7 @@ class dji_bridge_priv {
     ros::ServiceClient sdk_ctrl_authority_service;
     ros::ServiceClient drone_task_service;
     ros::ServiceClient query_version_service;
+    const tf::Matrix3x3 R_ENU2NED = tf::Matrix3x3(1, 0, 0, 0, -1, 0, 0, 0, -1), R_FRD2FLU = tf::Matrix3x3(1, 0, 0, 0, -1, 0, 0, 0, -1);
 
     double control[4], vel[3], poi[3], offset[3], localPos[3], localVel[3];
     std::string nameSpace;
@@ -117,8 +119,17 @@ class dji_bridge_priv {
       uavpose.header.stamp.sec = diff.total_seconds();
       uavpose.header.stamp.nsec = 1000 * (diff.total_microseconds() % 1000000);
 
-      uavpose.orientation   = msg->orientation;
-      uavpose.flightmode    = flight_statue;
+
+      tf::Matrix3x3 R_FLU2ENU(tf::Quaternion(uavpose.orientation.x, uavpose.orientation.y, uavpose.orientation.z, uavpose.orientation.w));
+      tf::Matrix3x3 R_FRD2NED = R_ENU2NED * R_FLU2ENU * R_FRD2FLU;
+      tf::Quaternion q_FRD2NED;
+      R_FRD2NED.getRotation(q_FRD2NED);
+      uavpose.orientation.w = q_FRD2NED.getW();
+      uavpose.orientation.x = q_FRD2NED.getX();
+      uavpose.orientation.y = q_FRD2NED.getY();
+      uavpose.orientation.z = q_FRD2NED.getZ();
+      
+      uavpose.flightmode    = flight_status;
       uavpose.angVelocity.x = msg->angular_velocity.x;
       uavpose.angVelocity.y = msg->angular_velocity.y;
       uavpose.angVelocity.z = msg->angular_velocity.z;
